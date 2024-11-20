@@ -1,0 +1,46 @@
+name: Gradle Build
+on: [push, pull_request]
+
+jobs:
+  build:
+    name: Build DynamicShop3 on ${{ matrix.os }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest]
+
+    steps:
+    - uses: actions/checkout@v4
+
+    - name: Set up JDK
+      uses: actions/setup-java@v4
+      with:
+        java-version: 21
+        distribution: 'temurin'
+
+    - name: Grant execute permission to script
+      run: bash -c "chmod +x script.sh"
+    - name: Update upstream and apply patches
+      shell: bash
+      run: |
+        git config --global user.email "action@github.com"
+        git config --global user.name "Action Github"
+        ./script.sh updateUpstream
+        ./script.sh applyPatches
+
+    - name: Setup Gradle
+      uses: gradle/actions/setup-gradle@v3
+      with:
+        cache-read-only: ${{ !(github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/heads/version/')) }}
+
+    - name: Execute Gradle build
+      run: |
+        cd DynamicShop3-Patchs
+        mvn clean compile install
+
+    - name: Upload DynamicShop3 jar
+      uses: actions/upload-artifact@v4
+      with:
+        name: DynamicShop3-Folia-Snapshot
+        path: DynamicShop3-Patchs/target/DynamicShop-*-Folia.jar
