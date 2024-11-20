@@ -1,0 +1,561 @@
+From d15c961fb2227cfba17b0f1fd8e311a72e54ae3f Mon Sep 17 00:00:00 2001
+From: Euphyllia Bierque <bierque.euphyllia@gmail.com>
+Date: Wed, 20 Nov 2024 01:42:54 +0100
+Subject: [PATCH 2/3] Replace Scheduler
+
+---
+ .../java/me/sat7/dynamicshop/DynamicShop.java |  35 ++--
+ .../me/sat7/dynamicshop/UpdateChecker.java    |   2 +-
+ .../me/sat7/dynamicshop/commands/SetTax.java  |  12 +-
+ .../me/sat7/dynamicshop/events/OnChat.java    |  10 +-
+ .../me/sat7/dynamicshop/guis/UIManager.java   |  10 +-
+ .../me/sat7/dynamicshop/transactions/Buy.java |   2 +-
+ .../dynamicshop/utilities/FoliaRunnable.java  | 179 ++++++++++++++++++
+ .../sat7/dynamicshop/utilities/LangUtil.java  |   4 +-
+ .../dynamicshop/utilities/RotationUtil.java   |   6 +-
+ .../sat7/dynamicshop/utilities/ShopUtil.java  |   2 +-
+ .../sat7/dynamicshop/utilities/UserUtil.java  |   4 +-
+ src/main/resources/plugin.yml                 |   3 +-
+ 12 files changed, 227 insertions(+), 42 deletions(-)
+ create mode 100644 src/main/java/me/sat7/dynamicshop/utilities/FoliaRunnable.java
+
+diff --git a/src/main/java/me/sat7/dynamicshop/DynamicShop.java b/src/main/java/me/sat7/dynamicshop/DynamicShop.java
+index 86a975b..cc8bf8e 100644
+--- a/src/main/java/me/sat7/dynamicshop/DynamicShop.java
++++ b/src/main/java/me/sat7/dynamicshop/DynamicShop.java
+@@ -79,12 +79,12 @@ public final class DynamicShop extends JavaPlugin implements Listener
+ 
+     public static CustomConfig ccSign = new CustomConfig();
+ 
+-    private BukkitTask periodicRepetitiveTask;
+-    private BukkitTask saveLogsTask;
+-    private BukkitTask cullLogsTask;
+-    private BukkitTask backupTask;
+-    private BukkitTask shopSaveTask;
+-    private BukkitTask userDataRepetitiveTask;
++    private io.papermc.paper.threadedregions.scheduler.ScheduledTask periodicRepetitiveTask; // Convert Folia
++    private io.papermc.paper.threadedregions.scheduler.ScheduledTask saveLogsTask; // Convert Folia
++    private io.papermc.paper.threadedregions.scheduler.ScheduledTask cullLogsTask; // Convert Folia
++    private io.papermc.paper.threadedregions.scheduler.ScheduledTask backupTask; // Convert Folia
++    private io.papermc.paper.threadedregions.scheduler.ScheduledTask shopSaveTask; // Convert Folia
++    private io.papermc.paper.threadedregions.scheduler.ScheduledTask userDataRepetitiveTask; // Convert Folia
+ 
+     public static boolean updateAvailable = false;
+     public static String lastVersion = "";
+@@ -151,7 +151,7 @@ public final class DynamicShop extends JavaPlugin implements Listener
+         console.sendMessage("---------------------");
+ 
+         console.sendMessage("RotationTaskMap: size: " + RotationUtil.RotationTaskMap.size());
+-        for(Map.Entry<String, Integer> entry : RotationUtil.RotationTaskMap.entrySet())
++        for(Map.Entry<String, io.papermc.paper.threadedregions.scheduler.ScheduledTask> entry : RotationUtil.RotationTaskMap.entrySet())  // Convert Folia
+             console.sendMessage(entry.getKey() + ": " + entry.getValue());
+ 
+         console.sendMessage("---------------------");
+@@ -249,7 +249,7 @@ public final class DynamicShop extends JavaPlugin implements Listener
+             setupRspRetryCount++;
+             //console.sendMessage(Constants.DYNAMIC_SHOP_PREFIX + " Economy provider not found. Retry... " + setupRspRetryCount + "/3");
+ 
+-            Bukkit.getScheduler().runTaskLater(this, this::SetupRSP, 40L);
++            Bukkit.getGlobalRegionScheduler().runDelayed(this, scheduledTask -> SetupRSP(), 40L); // Convert Folia
+         }
+     }
+ 
+@@ -345,7 +345,7 @@ public final class DynamicShop extends JavaPlugin implements Listener
+             {
+                 saveLogsTask.cancel();
+             }
+-            saveLogsTask = Bukkit.getScheduler().runTaskTimerAsynchronously(this, LogUtil::SaveLogToCSV, 0L, (20L * 10L));
++            saveLogsTask = Bukkit.getAsyncScheduler().runAtFixedRate(this, scheduledTask -> LogUtil.SaveLogToCSV(), 1L, (20L * 10L) * 50, java.util.concurrent.TimeUnit.MILLISECONDS);  // Convert Folia
+         }
+     }
+ 
+@@ -357,8 +357,8 @@ public final class DynamicShop extends JavaPlugin implements Listener
+             {
+                 cullLogsTask.cancel();
+             }
+-            cullLogsTask = Bukkit.getScheduler().runTaskTimerAsynchronously(
+-                    this, LogUtil::cullLogs, 0L, (20L * 60L * (long) ConfigUtil.GetLogCullTimeMinutes())
++            cullLogsTask = Bukkit.getAsyncScheduler().runAtFixedRate(  // Convert Folia
++                    this, scheduledTask -> LogUtil.cullLogs(), 1L, (20L * 60L * (long) ConfigUtil.GetLogCullTimeMinutes() * 50), java.util.concurrent.TimeUnit.MILLISECONDS  // Convert Folia
+             );
+         }
+     }
+@@ -368,8 +368,8 @@ public final class DynamicShop extends JavaPlugin implements Listener
+         if (userDataRepetitiveTask != null)
+             userDataRepetitiveTask.cancel();
+ 
+-        userDataRepetitiveTask = Bukkit.getScheduler().runTaskTimerAsynchronously(
+-                this, UserUtil::RepetitiveTask, 0L, 20L * 60L * 60L
++        userDataRepetitiveTask = Bukkit.getAsyncScheduler().runAtFixedRate(  // Convert Folia
++                this, scheduledTask -> UserUtil.RepetitiveTask(), 1L, 20L * 60L * 60L * 50, java.util.concurrent.TimeUnit.MILLISECONDS  // Convert Folia
+         );
+     }
+ 
+@@ -382,7 +382,7 @@ public final class DynamicShop extends JavaPlugin implements Listener
+ 
+         // 1000틱 = 50초 = 마인크래프트 1시간
+         // 20틱 = 현실시간 1초
+-        periodicRepetitiveTask = Bukkit.getScheduler().runTaskTimer(DynamicShop.plugin, this::RepeatAction, 20, 20); 
++        periodicRepetitiveTask = Bukkit.getGlobalRegionScheduler().runAtFixedRate(DynamicShop.plugin, scheduledTask -> RepeatAction(), 20, 20); // Convert Folia
+     }
+ 
+     private int repeatTaskCount = 0;
+@@ -412,7 +412,7 @@ public final class DynamicShop extends JavaPlugin implements Listener
+             backupTask.cancel();
+         }
+         long interval = (20L * 60L * (long) ConfigUtil.GetShopYmlBackup_IntervalMinutes());
+-        backupTask = Bukkit.getScheduler().runTaskTimer(DynamicShop.plugin, ShopUtil::ShopYMLBackup, interval, interval);
++        backupTask = Bukkit.getGlobalRegionScheduler().runAtFixedRate(DynamicShop.plugin, scheduledTask -> ShopUtil.SaveDirtyShop(), interval, interval); // Convert Folia
+     }
+ 
+     public void StartShopSaveTask()
+@@ -423,7 +423,7 @@ public final class DynamicShop extends JavaPlugin implements Listener
+         }
+ 
+         long interval = (20L * 10L);
+-        shopSaveTask = Bukkit.getScheduler().runTaskTimer(DynamicShop.plugin, ShopUtil::SaveDirtyShop, interval, interval);
++        shopSaveTask = Bukkit.getGlobalRegionScheduler().runAtFixedRate(DynamicShop.plugin, scheduledTask -> ShopUtil.SaveDirtyShop(), interval, interval); // Convert Folia
+     }
+ 
+     private void hookIntoJobs()
+@@ -534,7 +534,8 @@ public final class DynamicShop extends JavaPlugin implements Listener
+             ShopUtil.ForceSaveAllShop();
+         }
+ 
+-        Bukkit.getScheduler().cancelTasks(this);
++        Bukkit.getAsyncScheduler().cancelTasks(this); // Convert Folia
++        Bukkit.getGlobalRegionScheduler().cancelTasks(this); // Convert Folia
+         console.sendMessage(Constants.DYNAMIC_SHOP_PREFIX + " Disabled");
+     }
+ }
+diff --git a/src/main/java/me/sat7/dynamicshop/UpdateChecker.java b/src/main/java/me/sat7/dynamicshop/UpdateChecker.java
+index 1579b95..561b03a 100644
+--- a/src/main/java/me/sat7/dynamicshop/UpdateChecker.java
++++ b/src/main/java/me/sat7/dynamicshop/UpdateChecker.java
+@@ -23,7 +23,7 @@ public class UpdateChecker
+ 
+     public void getVersion(final Consumer<String> consumer)
+     {
+-        Bukkit.getScheduler().runTaskAsynchronously(this.plugin, () ->
++        Bukkit.getAsyncScheduler().runNow(this.plugin, (scheduledTask) -> // Convert Folia
+         {
+             try (InputStream inputStream = new URL("https://api.spigotmc.org/legacy/update.php?resource=" + this.resourceId).openStream(); Scanner scanner = new Scanner(inputStream))
+             {
+diff --git a/src/main/java/me/sat7/dynamicshop/commands/SetTax.java b/src/main/java/me/sat7/dynamicshop/commands/SetTax.java
+index 662508e..2075b75 100644
+--- a/src/main/java/me/sat7/dynamicshop/commands/SetTax.java
++++ b/src/main/java/me/sat7/dynamicshop/commands/SetTax.java
+@@ -13,7 +13,7 @@ import static me.sat7.dynamicshop.utilities.MathUtil.Clamp;
+ 
+ public final class SetTax extends DSCMD
+ {
+-    private static BukkitRunnable resetTaxTask = null;
++    private static me.sat7.dynamicshop.utilities.FoliaRunnable resetTaxTask = null; // Convert Folia
+ 
+     public SetTax()
+     {
+@@ -67,8 +67,12 @@ public final class SetTax extends DSCMD
+ 
+                 ConfigUtil.setCurrentTax(newValue);
+ 
+-                class ResetTaxTask extends BukkitRunnable
++                class ResetTaxTask extends me.sat7.dynamicshop.utilities.FoliaRunnable // Convert Folia
+                 {
++                    public ResetTaxTask(@org.jetbrains.annotations.NotNull io.papermc.paper.threadedregions.scheduler.GlobalRegionScheduler scheduler) { // Convert Folia
++                        super(scheduler);
++                    }
++                    // Convert Folia
+                     @Override
+                     public void run()
+                     {
+@@ -81,8 +85,8 @@ public final class SetTax extends DSCMD
+                     resetTaxTask.cancel();
+                     resetTaxTask = null;
+                 }
+-                resetTaxTask = new ResetTaxTask();
+-                resetTaxTask.runTaskLater(DynamicShop.plugin, 20L * 60L * tempTaxDurationMinutes);
++                resetTaxTask = new ResetTaxTask(org.bukkit.Bukkit.getGlobalRegionScheduler()); // Convert Folia
++                resetTaxTask.runDelayed(DynamicShop.plugin, 20L * 60L * tempTaxDurationMinutes); // Convert Folia
+ 
+                 sender.sendMessage(DynamicShop.dsPrefix(sender) + t(sender, "MESSAGE.CHANGES_APPLIED") + newValue);
+             } catch (Exception e)
+diff --git a/src/main/java/me/sat7/dynamicshop/events/OnChat.java b/src/main/java/me/sat7/dynamicshop/events/OnChat.java
+index 6cd3459..431b1d5 100644
+--- a/src/main/java/me/sat7/dynamicshop/events/OnChat.java
++++ b/src/main/java/me/sat7/dynamicshop/events/OnChat.java
+@@ -26,7 +26,7 @@ import static me.sat7.dynamicshop.utilities.MathUtil.Clamp;
+ public class OnChat implements Listener
+ {
+ 
+-    private static final Map<UUID, Integer> runnableMap = new HashMap<>();
++    private static final java.util.concurrent.ConcurrentHashMap<UUID, io.papermc.paper.threadedregions.scheduler.ScheduledTask> runnableMap = new java.util.concurrent.ConcurrentHashMap<>(); // Convert Folia
+ 
+     public static void WaitForInput(Player player)
+     {
+@@ -35,7 +35,7 @@ public class OnChat implements Listener
+             cancelRunnable(player);
+         }
+ 
+-        BukkitTask taskID = Bukkit.getScheduler().runTaskLater(DynamicShop.plugin, () ->
++        io.papermc.paper.threadedregions.scheduler.ScheduledTask taskID = player.getScheduler().runDelayed(DynamicShop.plugin, (scheduledTask) ->
+         {
+             UUID uuid = player.getUniqueId();
+             String userData = UserUtil.userTempData.get(uuid);
+@@ -58,15 +58,15 @@ public class OnChat implements Listener
+                 player.sendMessage(DynamicShop.dsPrefix(player) + t(player, "MESSAGE.INPUT_CANCELED"));
+             }
+ 
+-        }, 600);
+-        runnableMap.put(player.getUniqueId(), taskID.getTaskId());
++        }, null, 600); // Convert Folia
++        if (taskID != null) runnableMap.put(player.getUniqueId(), taskID); // Convert Folia
+     }
+ 
+     private static void cancelRunnable(Player player)
+     {
+         if (runnableMap.containsKey(player.getUniqueId()))
+         {
+-            Bukkit.getScheduler().cancelTask(runnableMap.get(player.getUniqueId()));
++            runnableMap.get(player.getUniqueId()).cancel(); // Convert Folia
+         }
+     }
+ 
+diff --git a/src/main/java/me/sat7/dynamicshop/guis/UIManager.java b/src/main/java/me/sat7/dynamicshop/guis/UIManager.java
+index bae7c59..771642d 100644
+--- a/src/main/java/me/sat7/dynamicshop/guis/UIManager.java
++++ b/src/main/java/me/sat7/dynamicshop/guis/UIManager.java
+@@ -16,7 +16,7 @@ import java.util.Map;
+ 
+ public class UIManager implements Listener
+ {
+-    private static final HashMap<Player, InGameUI> currentUI = new HashMap<>();
++    private static final java.util.concurrent.ConcurrentHashMap<Player, InGameUI> currentUI = new java.util.concurrent.ConcurrentHashMap<>(); // Convert Folia
+ 
+     public static void DebugLog()
+     {
+@@ -47,7 +47,7 @@ public class UIManager implements Listener
+ 
+     public static void Open(Player player, Inventory inventory, InGameUI inGameUI)
+     {
+-        new BukkitRunnable()
++        new me.sat7.dynamicshop.utilities.FoliaRunnable(player.getScheduler(), null) // Convert Folia
+         {
+             @Override
+             public void run()
+@@ -56,7 +56,7 @@ public class UIManager implements Listener
+ 
+                 currentUI.put(player, inGameUI);
+             }
+-        }.runTask(DynamicShop.plugin);
++        }.run(DynamicShop.plugin);// Convert Folia
+     }
+ 
+     public static boolean IsPlayerUsingPluginGUI(Player player)
+@@ -102,8 +102,8 @@ public class UIManager implements Listener
+ 
+     public static void RefreshUI()
+     {
+-        HashMap<Player, InGameUI> clone = (HashMap<Player, InGameUI>)currentUI.clone();
+-        for (Map.Entry<Player, InGameUI> entry : clone.entrySet())
++        java.util.concurrent.ConcurrentHashMap<Player, InGameUI> clone = new java.util.concurrent.ConcurrentHashMap<Player, InGameUI>(currentUI); // Convert Folia
++        for (java.util.concurrent.ConcurrentHashMap.Entry<Player, InGameUI> entry : clone.entrySet()) // Convert Folia
+         {
+             Player p = entry.getKey();
+             InGameUI ui = entry.getValue();
+diff --git a/src/main/java/me/sat7/dynamicshop/transactions/Buy.java b/src/main/java/me/sat7/dynamicshop/transactions/Buy.java
+index e41c3ba..3038f19 100644
+--- a/src/main/java/me/sat7/dynamicshop/transactions/Buy.java
++++ b/src/main/java/me/sat7/dynamicshop/transactions/Buy.java
+@@ -276,7 +276,7 @@ public final class Buy
+                             .replace("{itemType}", tempIS.getType().toString())
+                             .replace("{amount}", String.valueOf(actualAmount))
+                             .replace("{priceSum}", String.valueOf(priceSum));
+-                    Bukkit.dispatchCommand(Bukkit.getConsoleSender(), buyCmd);
++                    Bukkit.getGlobalRegionScheduler().execute(DynamicShop.plugin, () -> Bukkit.dispatchCommand(Bukkit.getConsoleSender(), buyCmd)); // Convert Folia
+                 }
+             }
+         }
+diff --git a/src/main/java/me/sat7/dynamicshop/utilities/FoliaRunnable.java b/src/main/java/me/sat7/dynamicshop/utilities/FoliaRunnable.java
+new file mode 100644
+index 0000000..5ccd3c0
+--- /dev/null
++++ b/src/main/java/me/sat7/dynamicshop/utilities/FoliaRunnable.java
+@@ -0,0 +1,179 @@
++package me.sat7.dynamicshop.utilities;
++
++import io.papermc.paper.threadedregions.scheduler.*;
++import org.bukkit.Location;
++import org.bukkit.World;
++import org.bukkit.plugin.Plugin;
++import org.jetbrains.annotations.NotNull;
++import org.jetbrains.annotations.Nullable;
++
++import java.util.concurrent.TimeUnit;
++
++public abstract class FoliaRunnable implements Runnable {
++
++    private ScheduledTask task;
++    private @Nullable AsyncScheduler asyncScheduler;
++    private @Nullable TimeUnit timeUnit;
++    private @Nullable EntityScheduler entityScheduler;
++    private @Nullable Runnable entityRetired;
++    private @Nullable GlobalRegionScheduler globalRegionScheduler;
++    private @Nullable RegionScheduler regionScheduler;
++    private @Nullable Location location;
++    private @Nullable World world;
++    private int chunkX;
++    private int chunkZ;
++
++
++    public FoliaRunnable(@NotNull AsyncScheduler scheduler, @Nullable TimeUnit timeUnit) {
++        this.asyncScheduler = scheduler;
++        this.timeUnit = timeUnit;
++    }
++
++    public FoliaRunnable(@NotNull EntityScheduler scheduler, @Nullable Runnable retired) {
++        this.entityScheduler = scheduler;
++        this.entityRetired = retired;
++    }
++
++    public FoliaRunnable(@NotNull GlobalRegionScheduler scheduler) {
++        this.globalRegionScheduler = scheduler;
++    }
++
++    public FoliaRunnable(@NotNull RegionScheduler scheduler, @Nullable Location location) {
++        this.regionScheduler = scheduler;
++        this.location = location;
++    }
++
++    public FoliaRunnable(@NotNull RegionScheduler scheduler, World world, int chunkX, int chunkZ) {
++        this.regionScheduler = scheduler;
++        this.world = world;
++        this.chunkX = chunkX;
++        this.chunkZ = chunkZ;
++    }
++
++    public boolean isCancelled() throws IllegalStateException {
++        checkScheduled();
++        return task.isCancelled();
++    }
++
++    public void cancel() throws IllegalStateException {
++        task.cancel();
++    }
++
++    @NotNull
++    public ScheduledTask run(@NotNull Plugin plugin) throws IllegalArgumentException, IllegalStateException {
++        checkNotYetScheduled();
++        if (this.globalRegionScheduler != null) {
++            return setupTask(this.globalRegionScheduler.run(plugin, scheduledTask -> this.run()));
++        } else if (this.entityScheduler != null) {
++            return setupTask(this.entityScheduler.run(plugin, scheduledTask -> this.run(), entityRetired));
++        } else if (this.regionScheduler != null) {
++            if (this.location != null) {
++                return setupTask(this.regionScheduler.run(plugin, location, scheduledTask -> this.run()));
++            } else if (world != null) {
++                return setupTask(this.regionScheduler.run(plugin, world, chunkX, chunkZ, scheduledTask -> this.run()));
++            } else {
++                throw new UnsupportedOperationException("The region type is not supported.");
++            }
++        } else if (this.asyncScheduler != null){
++            return setupTask(this.asyncScheduler.runNow(plugin, scheduledTask -> this.run()));
++        } else {
++            throw new UnsupportedOperationException("The task type is not supported.");
++        }
++    }
++
++    /**
++     * Schedules this to run after the specified number of server ticks.
++     *
++     * @param plugin the reference to the plugin scheduling task
++     * @param delay the ticks to wait before running the task
++     * @return a ScheduledTask that contains the id number
++     * @throws IllegalArgumentException if plugin is null
++     * @throws IllegalStateException if this was already scheduled
++     */
++    @NotNull
++    public ScheduledTask runDelayed(@NotNull Plugin plugin, long delay) throws IllegalArgumentException, IllegalStateException {
++        checkNotYetScheduled();
++        delay = Math.max(1, delay);
++        if (this.globalRegionScheduler != null) {
++            return setupTask(this.globalRegionScheduler.runDelayed(plugin, scheduledTask -> this.run(), delay));
++        } else if (this.entityScheduler != null) {
++            return setupTask(this.entityScheduler.runDelayed(plugin, scheduledTask -> this.run(), entityRetired, delay));
++        } else if (this.regionScheduler != null) {
++            if (this.location != null) {
++                return setupTask(this.regionScheduler.runDelayed(plugin, location, scheduledTask -> this.run(), delay));
++            } else if (world != null) {
++                return setupTask(this.regionScheduler.runDelayed(plugin, world, chunkX, chunkZ, scheduledTask -> this.run(), delay));
++            } else {
++                throw new UnsupportedOperationException("The region type is not supported.");
++            }
++        } else if (this.asyncScheduler != null && this.timeUnit != null) {
++            return setupTask(this.asyncScheduler.runDelayed(plugin, scheduledTask -> this.run(), delay, timeUnit));
++        } else {
++            throw new UnsupportedOperationException("The task type is not supported.");
++        }
++    }
++
++    /**
++     * Schedules this to repeatedly run until cancelled, starting after the
++     * specified number of server ticks.
++     *
++     * @param plugin the reference to the plugin scheduling task
++     * @param delay  the ticks to wait before running the task
++     * @param period the ticks to wait between runs
++     * @return a ScheduledTask that contains the id number
++     * @throws IllegalArgumentException if plugin is null
++     * @throws IllegalStateException    if this was already scheduled
++     */
++    public ScheduledTask runAtFixedRate(@NotNull Plugin plugin, long delay, long period) throws IllegalArgumentException, IllegalStateException {
++        checkNotYetScheduled();
++        delay = Math.max(1, delay);
++        period = Math.max(1, period);
++        if (this.globalRegionScheduler != null) {
++            return setupTask(this.globalRegionScheduler.runAtFixedRate(plugin, scheduledTask -> this.run(), delay, period));
++        } else if (this.entityScheduler != null) {
++            return setupTask(this.entityScheduler.runAtFixedRate(plugin, scheduledTask -> this.run(), entityRetired, delay, period));
++        } else if (this.regionScheduler != null) {
++            if (this.location != null) {
++                return setupTask(this.regionScheduler.runAtFixedRate(plugin, location, scheduledTask -> this.run(), delay, period));
++            } else if (world != null) {
++                return setupTask(this.regionScheduler.runAtFixedRate(plugin, world, chunkX, chunkZ, scheduledTask -> this.run(), delay, period));
++            } else {
++                throw new UnsupportedOperationException("The region type is not supported.");
++            }
++        } else if (this.asyncScheduler != null && this.timeUnit != null) {
++            return setupTask(this.asyncScheduler.runAtFixedRate(plugin, scheduledTask -> this.run(), delay, period, timeUnit));
++        } else {
++            throw new UnsupportedOperationException("The task type is not supported.");
++        }
++    }
++
++    /**
++     * Gets the task id for this runnable.
++     *
++     * @return the task id that this runnable was scheduled as
++     * @throws IllegalStateException if task was not scheduled yet
++     */
++    public int getTaskId() throws IllegalStateException {
++        checkScheduled();
++        return task.hashCode();
++    }
++
++    private void checkScheduled() {
++        if (task == null) {
++            throw new IllegalStateException("Not scheduled yet");
++        }
++    }
++
++    private void checkNotYetScheduled() {
++        if (task != null) {
++            throw new IllegalStateException("Already scheduled as " + task.hashCode());
++        }
++    }
++
++    @NotNull
++    private ScheduledTask setupTask(final ScheduledTask task) {
++        this.task = task;
++        return task;
++    }
++
++}
+\ No newline at end of file
+diff --git a/src/main/java/me/sat7/dynamicshop/utilities/LangUtil.java b/src/main/java/me/sat7/dynamicshop/utilities/LangUtil.java
+index 90cd64d..b0669bb 100644
+--- a/src/main/java/me/sat7/dynamicshop/utilities/LangUtil.java
++++ b/src/main/java/me/sat7/dynamicshop/utilities/LangUtil.java
+@@ -1050,7 +1050,7 @@ public final class LangUtil
+                         finalString.append(",");
+                 }
+ 
+-                Bukkit.dispatchCommand(Bukkit.getConsoleSender(), "tellraw " + player.getName() + " [" + finalString + "]");
++                Bukkit.getGlobalRegionScheduler().execute(DynamicShop.plugin, () -> Bukkit.dispatchCommand(Bukkit.getConsoleSender(), "tellraw " + player.getName() + " [" + finalString + "]")); // Convert Folia
+             }
+             else
+             {
+@@ -1067,7 +1067,7 @@ public final class LangUtil
+                 replacement = replacement + "},\"";
+ 
+                 String msg = message.replace("<item>", replacement);
+-                Bukkit.dispatchCommand(Bukkit.getConsoleSender(), "tellraw " + player.getName() + " [\"" + msg + "\"]");
++                Bukkit.getGlobalRegionScheduler().execute(DynamicShop.plugin, () -> Bukkit.dispatchCommand(Bukkit.getConsoleSender(), "tellraw " + player.getName() + " [\"" + msg + "\"]"));  // Convert Folia
+             }
+ 
+             return true;
+diff --git a/src/main/java/me/sat7/dynamicshop/utilities/RotationUtil.java b/src/main/java/me/sat7/dynamicshop/utilities/RotationUtil.java
+index 3b1633a..128a149 100644
+--- a/src/main/java/me/sat7/dynamicshop/utilities/RotationUtil.java
++++ b/src/main/java/me/sat7/dynamicshop/utilities/RotationUtil.java
+@@ -531,13 +531,13 @@ public final class RotationUtil
+ 
+     // ===== [ Task ] =====
+ 
+-    public static final ConcurrentHashMap<String, Integer> RotationTaskMap = new ConcurrentHashMap<>();
++    public static final ConcurrentHashMap<String, io.papermc.paper.threadedregions.scheduler.ScheduledTask> RotationTaskMap = new ConcurrentHashMap<>(); // Convert Folia
+ 
+     public static void StartRotationTask(String shopName, long delay, long period)
+     {
+         StopRotationTask(shopName);
+ 
+-        Integer i = Bukkit.getScheduler().runTaskTimer(DynamicShop.plugin, () -> ApplyNextRotation(shopName, period), delay, period).getTaskId();
++        io.papermc.paper.threadedregions.scheduler.ScheduledTask i = Bukkit.getGlobalRegionScheduler().runAtFixedRate(DynamicShop.plugin, (scheduledTask) -> ApplyNextRotation(shopName, period), delay, period); // Convert Folia
+         RotationTaskMap.put(shopName, i);
+ 
+         //DynamicShop.console.sendMessage("로테이션 시작됨: " + shopName + " / 딜레이: " + (delay / 20) + " / 간격: " + (period / 20));
+@@ -547,7 +547,7 @@ public final class RotationUtil
+     {
+         if (RotationTaskMap.containsKey(shopName))
+         {
+-            Bukkit.getScheduler().cancelTask(RotationTaskMap.get(shopName));
++            RotationTaskMap.get(shopName).cancel(); // Convert Folia
+             RotationTaskMap.remove(shopName);
+         }
+     }
+diff --git a/src/main/java/me/sat7/dynamicshop/utilities/ShopUtil.java b/src/main/java/me/sat7/dynamicshop/utilities/ShopUtil.java
+index 6b0f875..8e54957 100644
+--- a/src/main/java/me/sat7/dynamicshop/utilities/ShopUtil.java
++++ b/src/main/java/me/sat7/dynamicshop/utilities/ShopUtil.java
+@@ -803,7 +803,7 @@ public final class ShopUtil
+     public static void closeInventoryWithDelay(Player player)
+     {
+         //todo 왜 이렇게 만들었을까??? 2틱 딜레이가 필요한 이유가 뭐지?
+-        Bukkit.getScheduler().runTaskLater(DynamicShop.plugin, player::closeInventory, 2);
++        player.getScheduler().execute(DynamicShop.plugin, player::closeInventory, null, 2); // Convert Folia
+     }
+ 
+     public static void SetToRecommendedValueAll(String shop, CommandSender sender)
+diff --git a/src/main/java/me/sat7/dynamicshop/utilities/UserUtil.java b/src/main/java/me/sat7/dynamicshop/utilities/UserUtil.java
+index 0d56567..b68c9ea 100644
+--- a/src/main/java/me/sat7/dynamicshop/utilities/UserUtil.java
++++ b/src/main/java/me/sat7/dynamicshop/utilities/UserUtil.java
+@@ -13,8 +13,8 @@ import java.util.UUID;
+ public final class UserUtil
+ {
+     public static CustomConfig ccUser = new CustomConfig(); // 가급적 save 호출 피할 것. onDisable 에서 처리함.
+-    public static final HashMap<UUID, String> userTempData = new HashMap<>();
+-    public static final HashMap<UUID, String> userInteractItem = new HashMap<>();
++    public static final java.util.concurrent.ConcurrentHashMap<UUID, String> userTempData = new java.util.concurrent.ConcurrentHashMap<>();
++    public static final java.util.concurrent.ConcurrentHashMap<UUID, String> userInteractItem = new java.util.concurrent.ConcurrentHashMap<>();
+ 
+     public static void Init()
+     {
+diff --git a/src/main/resources/plugin.yml b/src/main/resources/plugin.yml
+index 7dd5050..e9e94ec 100644
+--- a/src/main/resources/plugin.yml
++++ b/src/main/resources/plugin.yml
+@@ -3,9 +3,10 @@ version: ${project.version}
+ main: me.sat7.dynamicshop.DynamicShop
+ depend: [Vault]
+ softdepend: [PlaceholderAPI, Jobs, LocaleLib, PlayerPoints]
+-api-version: 1.16
++api-version: 1.20
+ authors: [sat7, jpenilla, Multitallented, Chris6ix, KevinDaGame, FlorianKoerner, Kapitowa, LincolnJota]
+ description: Full GUI shop with dynamic prices
++folia-supported: true
+ commands:
+   DynamicShop:
+     description: "Full GUI shop with dynamic prices"
+-- 
+2.45.1.windows.1
+

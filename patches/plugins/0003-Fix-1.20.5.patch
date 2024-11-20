@@ -1,0 +1,76 @@
+From 5ef1ba27f49ea8dd349f33675ae29690ed0ad624 Mon Sep 17 00:00:00 2001
+From: Euphyllia Bierque <bierque.euphyllia@gmail.com>
+Date: Wed, 20 Nov 2024 01:42:55 +0100
+Subject: [PATCH 3/3] Fix 1.20.5
+
+---
+ src/main/java/me/sat7/dynamicshop/guis/LogViewer.java  | 4 ++--
+ src/main/java/me/sat7/dynamicshop/guis/PageEditor.java | 2 +-
+ src/main/java/me/sat7/dynamicshop/guis/Shop.java       | 2 +-
+ src/main/java/me/sat7/dynamicshop/guis/StartPage.java  | 2 +-
+ 4 files changed, 5 insertions(+), 5 deletions(-)
+
+diff --git a/src/main/java/me/sat7/dynamicshop/guis/LogViewer.java b/src/main/java/me/sat7/dynamicshop/guis/LogViewer.java
+index 8b2aea3..b741864 100644
+--- a/src/main/java/me/sat7/dynamicshop/guis/LogViewer.java
++++ b/src/main/java/me/sat7/dynamicshop/guis/LogViewer.java
+@@ -191,7 +191,7 @@ public class LogViewer extends InGameUI
+                 ItemMeta im = is.getItemMeta();
+                 im.addItemFlags(ItemFlag.HIDE_ATTRIBUTES);
+                 im.addItemFlags(ItemFlag.HIDE_ENCHANTS);
+-                im.addItemFlags(ItemFlag.HIDE_POTION_EFFECTS);
++                im.addItemFlags(ItemFlag.HIDE_ADDITIONAL_TOOLTIP);
+                 im.addItemFlags(ItemFlag.HIDE_DYE);
+                 is.setItemMeta(im);
+             } else
+@@ -204,7 +204,7 @@ public class LogViewer extends InGameUI
+                 ItemMeta im = is.getItemMeta();
+                 im.addItemFlags(ItemFlag.HIDE_ATTRIBUTES);
+                 im.addItemFlags(ItemFlag.HIDE_ENCHANTS);
+-                im.addItemFlags(ItemFlag.HIDE_POTION_EFFECTS);
++                im.addItemFlags(ItemFlag.HIDE_ADDITIONAL_TOOLTIP);
+                 im.addItemFlags(ItemFlag.HIDE_DYE);
+                 is.setItemMeta(im);
+ 
+diff --git a/src/main/java/me/sat7/dynamicshop/guis/PageEditor.java b/src/main/java/me/sat7/dynamicshop/guis/PageEditor.java
+index 146ebb9..31010f7 100644
+--- a/src/main/java/me/sat7/dynamicshop/guis/PageEditor.java
++++ b/src/main/java/me/sat7/dynamicshop/guis/PageEditor.java
+@@ -75,7 +75,7 @@ public final class PageEditor extends InGameUI
+                 meta.setLore(loreList);
+ 
+                 meta.addItemFlags(ItemFlag.HIDE_ATTRIBUTES);
+-                meta.addItemFlags(ItemFlag.HIDE_POTION_EFFECTS);
++                meta.addItemFlags(ItemFlag.HIDE_ADDITIONAL_TOOLTIP);
+                 meta.addItemFlags(ItemFlag.HIDE_DYE);
+                 meta.addItemFlags(ItemFlag.HIDE_ENCHANTS);
+ 
+diff --git a/src/main/java/me/sat7/dynamicshop/guis/Shop.java b/src/main/java/me/sat7/dynamicshop/guis/Shop.java
+index adaf8b0..113ebfe 100644
+--- a/src/main/java/me/sat7/dynamicshop/guis/Shop.java
++++ b/src/main/java/me/sat7/dynamicshop/guis/Shop.java
+@@ -357,7 +357,7 @@ public final class Shop extends InGameUI
+                     meta.setDisplayName(" ");
+                     meta.addItemFlags(ItemFlag.HIDE_ATTRIBUTES);
+                     meta.addItemFlags(ItemFlag.HIDE_ENCHANTS);
+-                    meta.addItemFlags(ItemFlag.HIDE_POTION_EFFECTS);
++                    meta.addItemFlags(ItemFlag.HIDE_ADDITIONAL_TOOLTIP);
+                 }
+ 
+                 meta.setLore(new ArrayList<>(Arrays.asList(lore.split("\n"))));
+diff --git a/src/main/java/me/sat7/dynamicshop/guis/StartPage.java b/src/main/java/me/sat7/dynamicshop/guis/StartPage.java
+index 81e0221..1b868c6 100644
+--- a/src/main/java/me/sat7/dynamicshop/guis/StartPage.java
++++ b/src/main/java/me/sat7/dynamicshop/guis/StartPage.java
+@@ -112,7 +112,7 @@ public final class StartPage extends InGameUI
+                 meta.setDisplayName(name);
+                 meta.setLore(tempList);
+                 meta.addItemFlags(ItemFlag.HIDE_ATTRIBUTES);
+-                meta.addItemFlags(ItemFlag.HIDE_POTION_EFFECTS);
++                meta.addItemFlags(ItemFlag.HIDE_ADDITIONAL_TOOLTIP);
+                 btn.setItemMeta(meta);
+                 inventory.setItem(idx, btn);
+ 
+-- 
+2.45.1.windows.1
+
