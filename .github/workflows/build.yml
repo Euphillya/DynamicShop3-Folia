@@ -1,4 +1,4 @@
-name: Gradle Build
+name: Gradle Build DShop
 on: [push, pull_request]
 
 jobs:
