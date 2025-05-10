@@ -1,5 +1,9 @@
 name: Gradle Build DShop
-on: [push, pull_request]
+on:
+  push:
+  pull_request:
+  schedule:
+    - cron: '0 0 * * 1'  # tous les lundis à minuit UTC
 
 jobs:
   build:
